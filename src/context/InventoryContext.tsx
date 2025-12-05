@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Product } from '../types/Product';
-import { StockMovement, MovementType } from '../types/StockMovement';
+import { StockMovement } from '../types/StockMovement';
+import { InventoryService } from '../services/inventoryService';
 
 interface InventoryContextType {
   products: Product[];
@@ -42,58 +43,48 @@ export const InventoryProvider: React.FC<InventoryProviderProps> = ({ children }
   };
 
   const addStockEntry = (productId: string, quantity: number, reason?: string) => {
-    if (quantity <= 0) {
-      throw new Error('A quantidade deve ser maior que zero');
+    // Validação usando serviço
+    const validation = InventoryService.validateStockEntry(quantity);
+    if (!validation.valid) {
+      throw new Error(validation.error);
     }
 
+    // Atualiza produtos usando serviço
     setProducts((prevProducts) =>
       prevProducts.map((product) =>
         product.id === productId
-          ? { ...product, quantity: product.quantity + quantity }
+          ? InventoryService.updateProductAfterEntry(product, quantity)
           : product
       )
     );
 
-    const movement: StockMovement = {
-      id: Date.now().toString(),
-      productId,
-      type: 'entry',
-      quantity,
-      date: new Date(),
-      reason,
-    };
-
+    // Cria movimento usando serviço
+    const movement = InventoryService.createStockMovement(productId, 'entry', quantity, reason);
     setMovements((prevMovements) => [...prevMovements, movement]);
   };
 
   const addStockExit = (productId: string, quantity: number, reason?: string) => {
-    if (quantity <= 0) {
-      throw new Error('A quantidade deve ser maior que zero');
-    }
-
     setProducts((prevProducts) => {
+      // Busca o produto no estado anterior
       const product = prevProducts.find((p) => p.id === productId);
       if (!product) {
         throw new Error('Produto não encontrado');
       }
-      if (product.quantity < quantity) {
-        throw new Error('Quantidade insuficiente em estoque');
+
+      // Validação usando serviço
+      const validation = InventoryService.validateStockExit(product, quantity);
+      if (!validation.valid) {
+        throw new Error(validation.error);
       }
 
+      // Atualiza produtos usando serviço
       return prevProducts.map((p) =>
-        p.id === productId ? { ...p, quantity: p.quantity - quantity } : p
+        p.id === productId ? InventoryService.updateProductAfterExit(p, quantity) : p
       );
     });
 
-    const movement: StockMovement = {
-      id: Date.now().toString(),
-      productId,
-      type: 'exit',
-      quantity,
-      date: new Date(),
-      reason,
-    };
-
+    // Cria movimento usando serviço
+    const movement = InventoryService.createStockMovement(productId, 'exit', quantity, reason);
     setMovements((prevMovements) => [...prevMovements, movement]);
   };
 

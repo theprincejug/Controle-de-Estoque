@@ -1,97 +1,34 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Sidebar } from '../components/Sidebar';
-import { useInventory } from '../context/InventoryContext';
-import { Product } from '../types/Product';
 import { Button } from '../components/Button';
+import { useInventoryPage } from '../hooks/useInventoryPage';
+import { ProductService } from '../services/productService';
 
 export const InventoryPage: React.FC = () => {
-  const { products, addProduct, removeProduct, addStockEntry, addStockExit } =
-    useInventory();
-  const [showForm, setShowForm] = useState(false);
-  const [showEntryModal, setShowEntryModal] = useState(false);
-  const [showExitModal, setShowExitModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState<Omit<Product, 'id'>>({
-    name: '',
-    quantity: 0,
-    price: 0,
-  });
-  const [movementQuantity, setMovementQuantity] = useState(0);
-  const [movementReason, setMovementReason] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newProduct: Product = {
-      ...formData,
-      id: Date.now().toString(),
-    };
-    addProduct(newProduct);
-    setFormData({ name: '', quantity: 0, price: 0 });
-    setShowForm(false);
-  };
-
-  const handleOpenEntryModal = (product: Product) => {
-    setSelectedProduct(product);
-    setMovementQuantity(0);
-    setMovementReason('');
-    setError(null);
-    setShowEntryModal(true);
-  };
-
-  const handleOpenExitModal = (product: Product) => {
-    setSelectedProduct(product);
-    setMovementQuantity(0);
-    setMovementReason('');
-    setError(null);
-    setShowExitModal(true);
-  };
-
-  const handleEntrySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProduct) return;
-
-    try {
-      if (movementQuantity <= 0) {
-        setError('A quantidade deve ser maior que zero');
-        return;
-      }
-      addStockEntry(selectedProduct.id, movementQuantity, movementReason || undefined);
-      setShowEntryModal(false);
-      setSelectedProduct(null);
-      setMovementQuantity(0);
-      setMovementReason('');
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao adicionar entrada');
-    }
-  };
-
-  const handleExitSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProduct) return;
-
-    try {
-      if (movementQuantity <= 0) {
-        setError('A quantidade deve ser maior que zero');
-        return;
-      }
-      addStockExit(selectedProduct.id, movementQuantity, movementReason || undefined);
-      setShowExitModal(false);
-      setSelectedProduct(null);
-      setMovementQuantity(0);
-      setMovementReason('');
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao registrar saída');
-    }
-  };
-
-  const handleRemoveProduct = (productId: string, productName: string) => {
-    if (window.confirm(`Tem certeza que deseja remover o produto "${productName}"?`)) {
-      removeProduct(productId);
-    }
-  };
+  const {
+    products,
+    showForm,
+    formData,
+    showEntryModal,
+    showExitModal,
+    selectedProduct,
+    movementQuantity,
+    movementReason,
+    error,
+    setFormData,
+    setMovementQuantity,
+    setMovementReason,
+    handleSubmitProduct,
+    handleToggleForm,
+    handleCancelForm,
+    handleOpenEntryModal,
+    handleCloseEntryModal,
+    handleSubmitEntry,
+    handleOpenExitModal,
+    handleCloseExitModal,
+    handleSubmitExit,
+    handleRemoveProduct,
+  } = useInventoryPage();
 
   return (
     <div className="flex min-h-screen bg-gray-100">
@@ -100,7 +37,7 @@ export const InventoryPage: React.FC = () => {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800">Estoque</h1>
-            <Button onClick={() => setShowForm(!showForm)}>
+            <Button onClick={handleToggleForm}>
               {showForm ? 'Cancelar' : '+ Adicionar Produto'}
             </Button>
           </div>
@@ -108,7 +45,12 @@ export const InventoryPage: React.FC = () => {
           {showForm && (
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Novo Produto</h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded mb-4">
+                  {error}
+                </div>
+              )}
+              <form onSubmit={handleSubmitProduct} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Nome do Produto
@@ -159,7 +101,7 @@ export const InventoryPage: React.FC = () => {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setShowForm(false)}
+                    onClick={handleCancelForm}
                   >
                     Cancelar
                   </Button>
@@ -202,15 +144,7 @@ export const InventoryPage: React.FC = () => {
                         {product.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <span
-                          className={`font-semibold ${
-                            product.quantity === 0
-                              ? 'text-red-600'
-                              : product.quantity < 10
-                              ? 'text-yellow-600'
-                              : 'text-green-600'
-                          }`}
-                        >
+                        <span className={`font-semibold ${ProductService.getStockStatusClass(product)}`}>
                           {product.quantity}
                         </span>
                       </td>
@@ -218,7 +152,7 @@ export const InventoryPage: React.FC = () => {
                         R$ {product.price.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        R$ {(product.quantity * product.price).toFixed(2)}
+                        R$ {ProductService.calculateTotalValue(product).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex gap-2">
@@ -233,7 +167,7 @@ export const InventoryPage: React.FC = () => {
                             variant="secondary"
                             onClick={() => handleOpenExitModal(product)}
                             className="text-xs px-3 py-1"
-                            disabled={product.quantity === 0}
+                            disabled={ProductService.isOutOfStock(product)}
                           >
                             Saída
                           </Button>
@@ -266,7 +200,7 @@ export const InventoryPage: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-6">
                   Estoque atual: <span className="font-semibold">{selectedProduct.quantity}</span>
                 </p>
-                <form onSubmit={handleEntrySubmit} className="space-y-4">
+                <form onSubmit={handleSubmitEntry} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Quantidade
@@ -304,11 +238,7 @@ export const InventoryPage: React.FC = () => {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => {
-                        setShowEntryModal(false);
-                        setSelectedProduct(null);
-                        setError(null);
-                      }}
+                      onClick={handleCloseEntryModal}
                     >
                       Cancelar
                     </Button>
@@ -331,7 +261,7 @@ export const InventoryPage: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-6">
                   Estoque atual: <span className="font-semibold">{selectedProduct.quantity}</span>
                 </p>
-                <form onSubmit={handleExitSubmit} className="space-y-4">
+                <form onSubmit={handleSubmitExit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Quantidade
@@ -373,11 +303,7 @@ export const InventoryPage: React.FC = () => {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => {
-                        setShowExitModal(false);
-                        setSelectedProduct(null);
-                        setError(null);
-                      }}
+                      onClick={handleCloseExitModal}
                     >
                       Cancelar
                     </Button>

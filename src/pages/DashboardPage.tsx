@@ -1,16 +1,14 @@
 import React from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { useInventory } from '../context/InventoryContext';
+import { DashboardService } from '../services/dashboardService';
 
 export const DashboardPage: React.FC = () => {
   const { products } = useInventory();
 
-  const totalProducts = products.length;
-  const totalQuantity = products.reduce((sum, product) => sum + product.quantity, 0);
-  const totalValue = products.reduce(
-    (sum, product) => sum + product.quantity * product.price,
-    0
-  );
+  const totalProducts = DashboardService.getTotalProducts(products);
+  const totalQuantity = DashboardService.getTotalQuantity(products);
+  const totalValue = DashboardService.getTotalValue(products);
 
   return (
     <div className="flex min-h-screen bg-gray-100">
@@ -33,7 +31,7 @@ export const DashboardPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="text-gray-600 text-sm font-medium mb-2">Valor Total</h3>
               <p className="text-3xl font-bold text-purple-600">
-                R$ {totalValue.toFixed(2)}
+                {DashboardService.formatCurrency(totalValue)}
               </p>
             </div>
           </div>
