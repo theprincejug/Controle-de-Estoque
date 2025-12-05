@@ -5,13 +5,20 @@ import { Product } from '../types/Product';
 import { Button } from '../components/Button';
 
 export const InventoryPage: React.FC = () => {
-  const { products, addProduct } = useInventory();
+  const { products, addProduct, removeProduct, addStockEntry, addStockExit } =
+    useInventory();
   const [showForm, setShowForm] = useState(false);
+  const [showEntryModal, setShowEntryModal] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<Omit<Product, 'id'>>({
     name: '',
     quantity: 0,
     price: 0,
   });
+  const [movementQuantity, setMovementQuantity] = useState(0);
+  const [movementReason, setMovementReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +29,68 @@ export const InventoryPage: React.FC = () => {
     addProduct(newProduct);
     setFormData({ name: '', quantity: 0, price: 0 });
     setShowForm(false);
+  };
+
+  const handleOpenEntryModal = (product: Product) => {
+    setSelectedProduct(product);
+    setMovementQuantity(0);
+    setMovementReason('');
+    setError(null);
+    setShowEntryModal(true);
+  };
+
+  const handleOpenExitModal = (product: Product) => {
+    setSelectedProduct(product);
+    setMovementQuantity(0);
+    setMovementReason('');
+    setError(null);
+    setShowExitModal(true);
+  };
+
+  const handleEntrySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+
+    try {
+      if (movementQuantity <= 0) {
+        setError('A quantidade deve ser maior que zero');
+        return;
+      }
+      addStockEntry(selectedProduct.id, movementQuantity, movementReason || undefined);
+      setShowEntryModal(false);
+      setSelectedProduct(null);
+      setMovementQuantity(0);
+      setMovementReason('');
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao adicionar entrada');
+    }
+  };
+
+  const handleExitSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+
+    try {
+      if (movementQuantity <= 0) {
+        setError('A quantidade deve ser maior que zero');
+        return;
+      }
+      addStockExit(selectedProduct.id, movementQuantity, movementReason || undefined);
+      setShowExitModal(false);
+      setSelectedProduct(null);
+      setMovementQuantity(0);
+      setMovementReason('');
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao registrar saída');
+    }
+  };
+
+  const handleRemoveProduct = (productId: string, productName: string) => {
+    if (window.confirm(`Tem certeza que deseja remover o produto "${productName}"?`)) {
+      removeProduct(productId);
+    }
   };
 
   return (
@@ -121,6 +190,9 @@ export const InventoryPage: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Valor Total
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -130,7 +202,17 @@ export const InventoryPage: React.FC = () => {
                         {product.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {product.quantity}
+                        <span
+                          className={`font-semibold ${
+                            product.quantity === 0
+                              ? 'text-red-600'
+                              : product.quantity < 10
+                              ? 'text-yellow-600'
+                              : 'text-green-600'
+                          }`}
+                        >
+                          {product.quantity}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         R$ {product.price.toFixed(2)}
@@ -138,12 +220,172 @@ export const InventoryPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                         R$ {(product.quantity * product.price).toFixed(2)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="primary"
+                            onClick={() => handleOpenEntryModal(product)}
+                            className="text-xs px-3 py-1"
+                          >
+                            Entrada
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => handleOpenExitModal(product)}
+                            className="text-xs px-3 py-1"
+                            disabled={product.quantity === 0}
+                          >
+                            Saída
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={() => handleRemoveProduct(product.id, product.name)}
+                            className="text-xs px-3 py-1"
+                          >
+                            Remover
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
           </div>
+
+          {/* Modal de Entrada */}
+          {showEntryModal && selectedProduct && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                  Entrada de Estoque
+                </h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Produto: <span className="font-semibold">{selectedProduct.name}</span>
+                </p>
+                <p className="text-sm text-gray-600 mb-6">
+                  Estoque atual: <span className="font-semibold">{selectedProduct.quantity}</span>
+                </p>
+                <form onSubmit={handleEntrySubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantidade
+                    </label>
+                    <input
+                      type="number"
+                      value={movementQuantity || ''}
+                      onChange={(e) => setMovementQuantity(parseInt(e.target.value) || 0)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Motivo (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={movementReason}
+                      onChange={(e) => setMovementReason(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Ex: Compra, Devolução, etc."
+                    />
+                  </div>
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
+                      {error}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button type="submit" className="flex-1">
+                      Confirmar Entrada
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowEntryModal(false);
+                        setSelectedProduct(null);
+                        setError(null);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Saída */}
+          {showExitModal && selectedProduct && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                  Saída de Estoque
+                </h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Produto: <span className="font-semibold">{selectedProduct.name}</span>
+                </p>
+                <p className="text-sm text-gray-600 mb-6">
+                  Estoque atual: <span className="font-semibold">{selectedProduct.quantity}</span>
+                </p>
+                <form onSubmit={handleExitSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantidade
+                    </label>
+                    <input
+                      type="number"
+                      value={movementQuantity || ''}
+                      onChange={(e) => setMovementQuantity(parseInt(e.target.value) || 0)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1"
+                      max={selectedProduct.quantity}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Máximo disponível: {selectedProduct.quantity}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Motivo (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={movementReason}
+                      onChange={(e) => setMovementReason(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Ex: Venda, Perda, Ajuste, etc."
+                    />
+                  </div>
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded">
+                      {error}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button type="submit" className="flex-1">
+                      Confirmar Saída
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowExitModal(false);
+                        setSelectedProduct(null);
+                        setError(null);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
